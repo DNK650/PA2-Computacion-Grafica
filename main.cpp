@@ -3,478 +3,1008 @@
 #include <cstdlib>
 #include <iostream>
 
-// VARIABLES DE TRANSFORMACION
+// ============================================================
+// PA2 - COMPUTACION GRAFICA
+// CELDA INDUSTRIAL ROBOTIZADA 3D
+// ============================================================
 
-float autoX = 0.0f;
-float autoAngulo = 0.0f;
-float autoEscala = 1.0f;
+const float PI = 3.14159265358979323846f;
 
-// Arbol izquierdo
-float arbolAngulo = 0.0f;
-float arbolEscala = 1.0f;
+// ---------------------------
+// ROBOT: transformaciones
+// ---------------------------
+float anguloBase = 0.0f;
+float anguloHombro = -25.0f;
+float anguloCodo = 45.0f;
+float anguloMuneca = 0.0f;
+float aperturaPinza = 0.40f;
+float escalaRobot = 1.0f;
 
-// Edificio
-float edificioEscala = 1.0f;
+// ---------------------------
+// OBJETO MOVIL DE LA CINTA
+// ---------------------------
+float cajaX = 0.0f;
+bool animarCinta = false;
 
-// Sol
-float solX = 0.0f;
-float solY = 0.0f;
+// ---------------------------
+// CAMARA
+// ---------------------------
+int vistaActual = 0; // 0 perspectiva, 1 frontal, 2 lateral, 3 superior
+float camaraAzimut = 45.0f;
+float camaraElevacion = 25.0f;
+float camaraDistancia = 16.0f;
 
-const float PI = 3.1415926f;
+bool wireframeGlobal = false;
 
+// ============================================================
+// UTILIDADES
+// ============================================================
 
-// FUNCIONES BASICAS
-
-void dibujarRectangulo(
-        float x1, float y1,
-        float x2, float y2,
-        float r, float g, float b)
+void limitarAngulos()
 {
-    glColor3f(r, g, b);
+    if (anguloBase > 360.0f) anguloBase -= 360.0f;
+    if (anguloBase < -360.0f) anguloBase += 360.0f;
 
-    glBegin(GL_QUADS);
-        glVertex2f(x1, y1);
-        glVertex2f(x2, y1);
-        glVertex2f(x2, y2);
-        glVertex2f(x1, y2);
-    glEnd();
+    if (anguloHombro > 80.0f) anguloHombro = 80.0f;
+    if (anguloHombro < -80.0f) anguloHombro = -80.0f;
+
+    if (anguloCodo > 130.0f) anguloCodo = 130.0f;
+    if (anguloCodo < -130.0f) anguloCodo = -130.0f;
+
+    if (anguloMuneca > 180.0f) anguloMuneca = 180.0f;
+    if (anguloMuneca < -180.0f) anguloMuneca = -180.0f;
+
+    if (aperturaPinza > 0.75f) aperturaPinza = 0.75f;
+    if (aperturaPinza < 0.15f) aperturaPinza = 0.15f;
+
+    if (escalaRobot > 1.5f) escalaRobot = 1.5f;
+    if (escalaRobot < 0.6f) escalaRobot = 0.6f;
 }
 
-void dibujarCirculo(
-        float centroX,
-        float centroY,
-        float radio,
-        float r, float g, float b)
+void dibujarPrisma(
+    float ancho, float alto, float profundidad,
+    float r, float g, float b)
 {
+    glPushMatrix();
     glColor3f(r, g, b);
-
-    glBegin(GL_POLYGON);
-
-    for (int i = 0; i < 100; i++)
-    {
-        float angulo = 2.0f * PI * static_cast<float>(i) / 100.0f;
-
-        float x = centroX + radio * std::cos(angulo);
-        float y = centroY + radio * std::sin(angulo);
-
-        glVertex2f(x, y);
-    }
-
-    glEnd();
+    glScalef(ancho, alto, profundidad);
+    glutSolidCube(1.0);
+    glPopMatrix();
 }
 
+void dibujarCilindroY(
+    float radio, float alto,
+    float r, float g, float b,
+    int segmentos = 24)
+{
+    glPushMatrix();
+    glColor3f(r, g, b);
 
-// SUPERFICIE PRINCIPAL
+    // glutSolidCylinder crece sobre Z.
+    // Rotamos -90 grados en X para hacerlo crecer sobre Y.
+    glRotatef(-90.0f, 1.0f, 0.0f, 0.0f);
+    glutSolidCylinder(radio, alto, segmentos, 8);
+
+    glPopMatrix();
+}
+
+void dibujarCilindroX(
+    float radio, float largo,
+    float r, float g, float b,
+    int segmentos = 24)
+{
+    glPushMatrix();
+    glColor3f(r, g, b);
+
+    // Z -> X
+    glRotatef(90.0f, 0.0f, 1.0f, 0.0f);
+    glutSolidCylinder(radio, largo, segmentos, 8);
+
+    glPopMatrix();
+}
+
+void dibujarEsfera(
+    float radio,
+    float r, float g, float b,
+    int segmentos = 24)
+{
+    glColor3f(r, g, b);
+    glutSolidSphere(radio, segmentos, segmentos);
+}
+
+// ============================================================
+// EJES XYZ
+// ============================================================
+
+void dibujarEjes()
+{
+    glLineWidth(2.0f);
+
+    glBegin(GL_LINES);
+
+    // X rojo
+    glColor3f(1.0f, 0.1f, 0.1f);
+    glVertex3f(0.0f, 0.02f, 0.0f);
+    glVertex3f(3.0f, 0.02f, 0.0f);
+
+    // Y verde
+    glColor3f(0.1f, 1.0f, 0.1f);
+    glVertex3f(0.0f, 0.02f, 0.0f);
+    glVertex3f(0.0f, 3.0f, 0.0f);
+
+    // Z azul
+    glColor3f(0.1f, 0.4f, 1.0f);
+    glVertex3f(0.0f, 0.02f, 0.0f);
+    glVertex3f(0.0f, 0.02f, 3.0f);
+
+    glEnd();
+
+    glLineWidth(1.0f);
+}
+
+// ============================================================
+// OBJETO 1: PISO
+// ============================================================
 
 void dibujarPiso()
 {
-    dibujarRectangulo(
-        -10.0f, -4.5f,
-         10.0f, -2.5f,
-         0.2f, 0.7f, 0.2f
-    );
+    glColor3f(0.34f, 0.36f, 0.38f);
+
+    glBegin(GL_QUADS);
+    glVertex3f(-10.0f, 0.0f, -8.0f);
+    glVertex3f( 10.0f, 0.0f, -8.0f);
+    glVertex3f( 10.0f, 0.0f,  8.0f);
+    glVertex3f(-10.0f, 0.0f,  8.0f);
+    glEnd();
+
+    // Cuadricula industrial
+    glColor3f(0.22f, 0.24f, 0.26f);
+    glBegin(GL_LINES);
+
+    for (int x = -10; x <= 10; ++x)
+    {
+        glVertex3f((float)x, 0.005f, -8.0f);
+        glVertex3f((float)x, 0.005f,  8.0f);
+    }
+
+    for (int z = -8; z <= 8; ++z)
+    {
+        glVertex3f(-10.0f, 0.005f, (float)z);
+        glVertex3f( 10.0f, 0.005f, (float)z);
+    }
+
+    glEnd();
 }
 
+// ============================================================
+// OBJETO 2: MESA DE TRABAJO
+// ============================================================
 
-// CARRETERA
-
-
-void dibujarCarretera()
+void dibujarMesa()
 {
-    dibujarRectangulo(
-        -10.0f, -7.5f,
-         10.0f, -4.5f,
-         0.25f, 0.25f, 0.25f
-    );
+    glPushMatrix();
+    glTranslatef(-0.5f, 0.0f, 3.8f);
 
-    for (float x = -9.0f; x < 10.0f; x += 4.0f)
+    // Tablero
+    glPushMatrix();
+    glTranslatef(0.0f, 1.45f, 0.0f);
+    dibujarPrisma(3.6f, 0.22f, 2.0f, 0.18f, 0.32f, 0.48f);
+    glPopMatrix();
+
+    // Patas
+    const float px[4] = {-1.55f, 1.55f, -1.55f, 1.55f};
+    const float pz[4] = {-0.75f, -0.75f, 0.75f, 0.75f};
+
+    for (int i = 0; i < 4; ++i)
     {
-        dibujarRectangulo(
-            x, -6.1f,
-            x + 2.0f, -5.9f,
-            1.0f, 1.0f, 1.0f
-        );
+        glPushMatrix();
+        glTranslatef(px[i], 0.70f, pz[i]);
+        dibujarPrisma(0.18f, 1.40f, 0.18f, 0.12f, 0.16f, 0.20f);
+        glPopMatrix();
+    }
+
+    glPopMatrix();
+}
+
+// ============================================================
+// OBJETO 3: CINTA TRANSPORTADORA
+// ============================================================
+
+void dibujarCintaTransportadora()
+{
+    glPushMatrix();
+    glTranslatef(2.3f, 0.0f, -1.2f);
+
+    // Banda superior
+    glPushMatrix();
+    glTranslatef(0.0f, 1.10f, 0.0f);
+    dibujarPrisma(6.5f, 0.18f, 1.8f, 0.10f, 0.11f, 0.13f);
+    glPopMatrix();
+
+    // Laterales
+    glPushMatrix();
+    glTranslatef(0.0f, 1.28f, 0.82f);
+    dibujarPrisma(6.5f, 0.18f, 0.12f, 0.65f, 0.68f, 0.72f);
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslatef(0.0f, 1.28f, -0.82f);
+    dibujarPrisma(6.5f, 0.18f, 0.12f, 0.65f, 0.68f, 0.72f);
+    glPopMatrix();
+
+    // Rodillos
+    for (float x = -2.8f; x <= 2.8f; x += 0.8f)
+    {
+        glPushMatrix();
+        glTranslatef(x, 1.04f, -0.76f);
+        dibujarCilindroX(0.11f, 1.52f, 0.55f, 0.58f, 0.62f);
+        glPopMatrix();
+    }
+
+    // Soportes
+    const float patasX[4] = {-2.7f, -0.9f, 0.9f, 2.7f};
+    for (int i = 0; i < 4; ++i)
+    {
+        glPushMatrix();
+        glTranslatef(patasX[i], 0.52f, 0.62f);
+        dibujarPrisma(0.16f, 1.04f, 0.16f, 0.22f, 0.24f, 0.28f);
+        glPopMatrix();
+
+        glPushMatrix();
+        glTranslatef(patasX[i], 0.52f, -0.62f);
+        dibujarPrisma(0.16f, 1.04f, 0.16f, 0.22f, 0.24f, 0.28f);
+        glPopMatrix();
+    }
+
+    glPopMatrix();
+}
+
+// ============================================================
+// OBJETOS 4, 5 y 6: CAJAS
+// ============================================================
+
+void dibujarCaja(float x, float z, float r, float g, float b)
+{
+    glPushMatrix();
+    glTranslatef(x, 1.52f, z);
+
+    // Caja principal
+    dibujarPrisma(0.95f, 0.75f, 0.95f, r, g, b);
+
+    // Franja superior
+    glPushMatrix();
+    glTranslatef(0.0f, 0.39f, 0.0f);
+    dibujarPrisma(0.98f, 0.05f, 0.98f, 0.88f, 0.80f, 0.56f);
+    glPopMatrix();
+
+    glPopMatrix();
+}
+
+void dibujarCajas()
+{
+    // Caja controlada/animada
+    dibujarCaja(1.0f + cajaX, -1.2f, 0.76f, 0.43f, 0.16f);
+
+    // Caja 2
+    dibujarCaja(3.0f, -1.2f, 0.20f, 0.55f, 0.85f);
+
+    // Caja 3 sobre la mesa
+    glPushMatrix();
+    glTranslatef(-1.1f, 0.34f, 5.0f);
+    dibujarCaja(0.0f, 0.0f, 0.30f, 0.72f, 0.36f);
+    glPopMatrix();
+}
+
+// ============================================================
+// OBJETO 7: ROBOT ARTICULADO - MODELADO JERARQUICO
+// ============================================================
+
+void dibujarRobot()
+{
+    glPushMatrix();
+
+    // Posicion del robot en la escena
+    glTranslatef(-4.0f, 0.0f, 0.2f);
+
+    // Escala interactiva
+    glScalef(escalaRobot, escalaRobot, escalaRobot);
+
+    // --------------------------------------------------------
+    // BASE: padre de toda la cadena
+    // --------------------------------------------------------
+    glRotatef(anguloBase, 0.0f, 1.0f, 0.0f);
+
+    glPushMatrix();
+    dibujarCilindroY(1.10f, 0.45f, 0.20f, 0.22f, 0.26f);
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslatef(0.0f, 0.45f, 0.0f);
+    dibujarCilindroY(0.72f, 0.45f, 0.86f, 0.43f, 0.06f);
+    glPopMatrix();
+
+    // Llegamos al hombro
+    glTranslatef(0.0f, 0.92f, 0.0f);
+
+    // Hombro
+    dibujarEsfera(0.48f, 0.95f, 0.55f, 0.08f);
+    glRotatef(anguloHombro, 0.0f, 0.0f, 1.0f);
+
+    // --------------------------------------------------------
+    // BRAZO
+    // --------------------------------------------------------
+    glPushMatrix();
+    glTranslatef(0.0f, 1.35f, 0.0f);
+    dibujarPrisma(0.72f, 2.70f, 0.72f, 0.95f, 0.50f, 0.05f);
+    glPopMatrix();
+
+    // Llegamos al codo
+    glTranslatef(0.0f, 2.70f, 0.0f);
+
+    dibujarEsfera(0.43f, 0.18f, 0.20f, 0.24f);
+    glRotatef(anguloCodo, 0.0f, 0.0f, 1.0f);
+
+    // --------------------------------------------------------
+    // ANTEBRAZO
+    // --------------------------------------------------------
+    glPushMatrix();
+    glTranslatef(0.0f, 1.15f, 0.0f);
+    dibujarPrisma(0.60f, 2.30f, 0.60f, 1.00f, 0.68f, 0.08f);
+    glPopMatrix();
+
+    // Llegamos a muneca
+    glTranslatef(0.0f, 2.30f, 0.0f);
+
+    dibujarEsfera(0.36f, 0.22f, 0.24f, 0.28f);
+    glRotatef(anguloMuneca, 0.0f, 1.0f, 0.0f);
+
+    // --------------------------------------------------------
+    // MUNECA + PINZA
+    // --------------------------------------------------------
+    glPushMatrix();
+    glTranslatef(0.0f, 0.28f, 0.0f);
+    dibujarPrisma(1.30f, 0.38f, 0.75f, 0.18f, 0.20f, 0.24f);
+    glPopMatrix();
+
+    // Dedo izquierdo
+    glPushMatrix();
+    glTranslatef(-aperturaPinza, 0.78f, 0.0f);
+    dibujarPrisma(0.18f, 0.90f, 0.28f, 0.82f, 0.84f, 0.88f);
+    glPopMatrix();
+
+    // Dedo derecho
+    glPushMatrix();
+    glTranslatef(aperturaPinza, 0.78f, 0.0f);
+    dibujarPrisma(0.18f, 0.90f, 0.28f, 0.82f, 0.84f, 0.88f);
+    glPopMatrix();
+
+    glPopMatrix();
+}
+
+// ============================================================
+// OBJETO 8: PANEL DE CONTROL
+// ============================================================
+
+void dibujarPanelControl()
+{
+    glPushMatrix();
+    glTranslatef(6.5f, 0.0f, 3.7f);
+
+    // Pedestal
+    glPushMatrix();
+    glTranslatef(0.0f, 1.0f, 0.0f);
+    dibujarPrisma(0.35f, 2.0f, 0.35f, 0.22f, 0.24f, 0.28f);
+    glPopMatrix();
+
+    // Consola
+    glPushMatrix();
+    glTranslatef(0.0f, 2.25f, 0.0f);
+    glRotatef(-12.0f, 1.0f, 0.0f, 0.0f);
+    dibujarPrisma(1.65f, 1.05f, 0.30f, 0.12f, 0.15f, 0.18f);
+
+    // Pantalla
+    glPushMatrix();
+    glTranslatef(0.0f, 0.05f, 0.17f);
+    dibujarPrisma(1.28f, 0.68f, 0.04f, 0.10f, 0.72f, 0.88f);
+    glPopMatrix();
+
+    // Boton de emergencia
+    glPushMatrix();
+    glTranslatef(0.55f, -0.34f, 0.22f);
+    dibujarEsfera(0.12f, 0.95f, 0.08f, 0.08f);
+    glPopMatrix();
+
+    glPopMatrix();
+    glPopMatrix();
+}
+
+// ============================================================
+// OBJETO 9: LAMPARA INDUSTRIAL
+// ============================================================
+
+void dibujarLampara()
+{
+    glPushMatrix();
+    glTranslatef(-7.0f, 0.0f, -4.8f);
+
+    // Poste
+    dibujarCilindroY(0.13f, 4.6f, 0.20f, 0.22f, 0.25f);
+
+    // Brazo horizontal
+    glPushMatrix();
+    glTranslatef(0.0f, 4.45f, 0.0f);
+    glRotatef(90.0f, 0.0f, 0.0f, 1.0f);
+    dibujarCilindroY(0.10f, 1.3f, 0.20f, 0.22f, 0.25f);
+    glPopMatrix();
+
+    // Cabezal
+    glPushMatrix();
+    glTranslatef(1.25f, 4.45f, 0.0f);
+    glRotatef(90.0f, 1.0f, 0.0f, 0.0f);
+    glColor3f(0.95f, 0.76f, 0.12f);
+    glutSolidCone(0.48f, 0.70f, 24, 8);
+    glPopMatrix();
+
+    glPopMatrix();
+}
+
+// ============================================================
+// OBJETO 10: BARRERA DE SEGURIDAD
+// ============================================================
+
+void dibujarBarrera()
+{
+    glPushMatrix();
+    glTranslatef(-1.0f, 0.0f, -5.5f);
+
+    // Postes
+    for (float x = -7.0f; x <= 7.0f; x += 2.0f)
+    {
+        glPushMatrix();
+        glTranslatef(x, 1.0f, 0.0f);
+        dibujarPrisma(0.12f, 2.0f, 0.12f, 0.92f, 0.72f, 0.08f);
+        glPopMatrix();
+    }
+
+    // Riel superior
+    glPushMatrix();
+    glTranslatef(0.0f, 1.75f, 0.0f);
+    dibujarPrisma(14.2f, 0.10f, 0.10f, 0.92f, 0.72f, 0.08f);
+    glPopMatrix();
+
+    // Riel medio
+    glPushMatrix();
+    glTranslatef(0.0f, 0.95f, 0.0f);
+    dibujarPrisma(14.2f, 0.08f, 0.08f, 0.92f, 0.72f, 0.08f);
+    glPopMatrix();
+
+    glPopMatrix();
+}
+
+// ============================================================
+// CURVA PARAMETRICA: BEZIER CUBICA
+// Representa un cable de alimentacion/senal.
+// B(t) = (1-t)^3 P0 + 3(1-t)^2 t P1 +
+//        3(1-t)t^2 P2 + t^3 P3
+// ============================================================
+
+void dibujarCurvaBezier()
+{
+    const float P0[3] = {-5.8f, 0.8f, 1.2f};
+    const float P1[3] = {-6.5f, 4.8f, 1.5f};
+    const float P2[3] = {-2.0f, 6.3f, 1.2f};
+    const float P3[3] = {-1.2f, 3.8f, 0.8f};
+
+    glLineWidth(4.0f);
+    glColor3f(0.08f, 0.08f, 0.08f);
+
+    glBegin(GL_LINE_STRIP);
+
+    for (int i = 0; i <= 80; ++i)
+    {
+        float t = i / 80.0f;
+        float u = 1.0f - t;
+
+        float b0 = u * u * u;
+        float b1 = 3.0f * u * u * t;
+        float b2 = 3.0f * u * t * t;
+        float b3 = t * t * t;
+
+        float x = b0 * P0[0] + b1 * P1[0] + b2 * P2[0] + b3 * P3[0];
+        float y = b0 * P0[1] + b1 * P1[1] + b2 * P2[1] + b3 * P3[1];
+        float z = b0 * P0[2] + b1 * P1[2] + b2 * P2[2] + b3 * P3[2];
+
+        glVertex3f(x, y, z);
+    }
+
+    glEnd();
+    glLineWidth(1.0f);
+}
+
+// ============================================================
+// SUPERFICIE PARAMETRICA GENERADA + WIREFRAME
+//
+// S(u,v):
+// x = -2.2 + 4.4u
+// y = 0.4 + 2.8v
+// z = -3.8 + 0.28 sin(pi*u) sin(pi*v)
+//
+// Es un panel protector curvado generado matematicamente.
+// ============================================================
+
+void puntoSuperficie(float u, float v, float& x, float& y, float& z)
+{
+    x = -2.2f + 4.4f * u;
+    y = 0.4f + 2.8f * v;
+    z = -3.8f + 0.28f * std::sin(PI * u) * std::sin(PI * v);
+}
+
+void dibujarSuperficieParametrica()
+{
+    glColor3f(0.15f, 0.85f, 0.95f);
+    glLineWidth(1.5f);
+
+    const int NU = 18;
+    const int NV = 12;
+
+    // Lineas en direccion U
+    for (int j = 0; j <= NV; ++j)
+    {
+        float v = (float)j / NV;
+
+        glBegin(GL_LINE_STRIP);
+
+        for (int i = 0; i <= NU; ++i)
+        {
+            float u = (float)i / NU;
+            float x, y, z;
+            puntoSuperficie(u, v, x, y, z);
+            glVertex3f(x, y, z);
+        }
+
+        glEnd();
+    }
+
+    // Lineas en direccion V
+    for (int i = 0; i <= NU; ++i)
+    {
+        float u = (float)i / NU;
+
+        glBegin(GL_LINE_STRIP);
+
+        for (int j = 0; j <= NV; ++j)
+        {
+            float v = (float)j / NV;
+            float x, y, z;
+            puntoSuperficie(u, v, x, y, z);
+            glVertex3f(x, y, z);
+        }
+
+        glEnd();
+    }
+
+    // Soportes del panel
+    glPushMatrix();
+    glTranslatef(-2.3f, 1.6f, -3.8f);
+    dibujarPrisma(0.12f, 3.2f, 0.12f, 0.16f, 0.18f, 0.22f);
+    glPopMatrix();
+
+    glPushMatrix();
+    glTranslatef(2.3f, 1.6f, -3.8f);
+    dibujarPrisma(0.12f, 3.2f, 0.12f, 0.16f, 0.18f, 0.22f);
+    glPopMatrix();
+
+    glLineWidth(1.0f);
+}
+
+// ============================================================
+// SENSOR DE SEGURIDAD EN WIREFRAME
+// ============================================================
+
+void dibujarSensor()
+{
+    glPushMatrix();
+    glTranslatef(7.4f, 0.0f, -3.5f);
+
+    glPushMatrix();
+    glTranslatef(0.0f, 1.1f, 0.0f);
+    dibujarPrisma(0.18f, 2.2f, 0.18f, 0.20f, 0.22f, 0.25f);
+    glPopMatrix();
+
+    glTranslatef(0.0f, 2.35f, 0.0f);
+
+    glColor3f(0.95f, 0.18f, 0.15f);
+    glutWireSphere(0.42f, 16, 12);
+
+    glPopMatrix();
+}
+
+// ============================================================
+// CAMARA
+// ============================================================
+
+void aplicarCamara()
+{
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    switch (vistaActual)
+    {
+        // Perspectiva orbitable
+        case 0:
+        {
+            float az = camaraAzimut * PI / 180.0f;
+            float el = camaraElevacion * PI / 180.0f;
+
+            float x = camaraDistancia * std::cos(el) * std::sin(az);
+            float y = 2.0f + camaraDistancia * std::sin(el);
+            float z = camaraDistancia * std::cos(el) * std::cos(az);
+
+            gluLookAt(
+                x, y, z,
+                0.0f, 1.8f, 0.0f,
+                0.0f, 1.0f, 0.0f
+            );
+            break;
+        }
+
+        // Frontal
+        case 1:
+            gluLookAt(
+                0.0f, 5.0f, 17.0f,
+                0.0f, 1.8f, 0.0f,
+                0.0f, 1.0f, 0.0f
+            );
+            break;
+
+        // Lateral
+        case 2:
+            gluLookAt(
+                17.0f, 5.0f, 0.0f,
+                0.0f, 1.8f, 0.0f,
+                0.0f, 1.0f, 0.0f
+            );
+            break;
+
+        // Superior
+        case 3:
+            gluLookAt(
+                0.0f, 19.0f, 0.01f,
+                0.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, -1.0f
+            );
+            break;
     }
 }
 
+// ============================================================
+// ESCENA COMPLETA
+// ============================================================
 
-// EDIFICIO - MODELO LOCAL
-
-void dibujarModeloEdificio()
+void dibujarEscena()
 {
-    // Cuerpo
-    dibujarRectangulo(
-        -2.5f, 0.0f,
-         2.5f, 5.5f,
-         0.75f, 0.55f, 0.35f
-    );
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Techo
-    glColor3f(0.6f, 0.15f, 0.1f);
-    glBegin(GL_TRIANGLES);
-        glVertex2f(-3.0f, 5.5f);
-        glVertex2f( 3.0f, 5.5f);
-        glVertex2f( 0.0f, 7.2f);
-    glEnd();
+    aplicarCamara();
 
-    // Puerta
-    dibujarRectangulo(
-        -0.6f, 0.0f,
-         0.6f, 2.3f,
-         0.35f, 0.15f, 0.05f
-    );
+    if (wireframeGlobal)
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    else
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-    // Ventana izquierda
-    dibujarRectangulo(
-        -1.9f, 2.7f,
-        -0.8f, 4.0f,
-         0.4f, 0.8f, 1.0f
-    );
+    // Escena
+    dibujarPiso();
+    dibujarEjes();
 
-    // Ventana derecha
-    dibujarRectangulo(
-         0.8f, 2.7f,
-         1.9f, 4.0f,
-         0.4f, 0.8f, 1.0f
-    );
+    dibujarMesa();
+    dibujarCintaTransportadora();
+    dibujarCajas();
+    dibujarRobot();
+    dibujarPanelControl();
+    dibujarLampara();
+    dibujarBarrera();
+
+    // Curva paramétrica
+    dibujarCurvaBezier();
+
+    // Superficie paramétrica permanentemente representada como malla
+    dibujarSuperficieParametrica();
+
+    // Objeto wireframe adicional
+    dibujarSensor();
+
+    glutSwapBuffers();
 }
 
-void dibujarEdificio()
+// ============================================================
+// PROYECCION / RESIZE
+// ============================================================
+
+void redimensionar(int ancho, int alto)
 {
-    glPushMatrix();
+    if (alto == 0)
+        alto = 1;
 
-    // Ubicacion del edificio en el mundo
-    glTranslatef(0.0f, -2.5f, 0.0f);
+    float aspecto = (float)ancho / (float)alto;
 
-    // Escala aplicada desde la base del edificio
-    glScalef(edificioEscala, edificioEscala, 1.0f);
+    glViewport(0, 0, ancho, alto);
 
-    dibujarModeloEdificio();
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
 
-    glPopMatrix();
-}
-
-
-// ARBOL - MODELO LOCAL
-
-void dibujarModeloArbol()
-{
-    // Tronco
-    dibujarRectangulo(
-        -0.3f, 0.0f,
-         0.3f, 2.5f,
-         0.45f, 0.22f, 0.05f
+    gluPerspective(
+        60.0,
+        aspecto,
+        0.1,
+        100.0
     );
 
-    // Copa
-    dibujarCirculo(
-        0.0f, 3.3f,
-        1.3f,
-        0.0f, 0.5f, 0.0f
-    );
+    glMatrixMode(GL_MODELVIEW);
 }
 
-void dibujarArbolIzquierdo()
+// ============================================================
+// RESET
+// ============================================================
+
+void reiniciar()
 {
-    glPushMatrix();
+    anguloBase = 0.0f;
+    anguloHombro = -25.0f;
+    anguloCodo = 45.0f;
+    anguloMuneca = 0.0f;
+    aperturaPinza = 0.40f;
+    escalaRobot = 1.0f;
 
-    // Posicion del arbol izquierdo
-    glTranslatef(-6.0f, -2.5f, 0.0f);
+    cajaX = 0.0f;
+    animarCinta = false;
 
-    // Rotacion y escala respecto a la base del arbol
-    glRotatef(arbolAngulo, 0.0f, 0.0f, 1.0f);
-    glScalef(arbolEscala, arbolEscala, 1.0f);
+    vistaActual = 0;
+    camaraAzimut = 45.0f;
+    camaraElevacion = 25.0f;
+    camaraDistancia = 16.0f;
 
-    dibujarModeloArbol();
+    wireframeGlobal = false;
 
-    glPopMatrix();
+    glutPostRedisplay();
 }
 
-void dibujarArbolDerecho()
-{
-    glPushMatrix();
-
-    glTranslatef(6.0f, -2.5f, 0.0f);
-    dibujarModeloArbol();
-
-    glPopMatrix();
-}
-
-// SOL
-
-void dibujarSol()
-{
-    glPushMatrix();
-
-    // Traslacion interactiva del sol
-    glTranslatef(-7.5f + solX, 5.5f + solY, 0.0f);
-
-    dibujarCirculo(
-        0.0f, 0.0f,
-        0.9f,
-        1.0f, 0.85f, 0.0f
-    );
-
-    glPopMatrix();
-}
-
-
-// AUTOMOVIL - MODELO LOCAL
-
-
-void dibujarModeloAuto()
-{
-    // Carroceria
-    dibujarRectangulo(
-        -1.7f, -0.7f,
-         1.7f,  0.3f,
-         0.9f, 0.1f, 0.1f
-    );
-
-    // Parte superior
-    glColor3f(0.8f, 0.1f, 0.1f);
-    glBegin(GL_POLYGON);
-        glVertex2f(-1.0f, 0.3f);
-        glVertex2f(-0.5f, 0.9f);
-        glVertex2f( 0.8f, 0.9f);
-        glVertex2f( 1.3f, 0.3f);
-    glEnd();
-
-    // Rueda izquierda
-    dibujarCirculo(
-        -1.0f, -0.8f,
-        0.4f,
-        0.05f, 0.05f, 0.05f
-    );
-
-    // Rueda derecha
-    dibujarCirculo(
-         1.0f, -0.8f,
-         0.4f,
-         0.05f, 0.05f, 0.05f
-    );
-}
-
-void dibujarAuto()
-{
-    glPushMatrix();
-
-    // T: ubicar/mover el auto en el mundo
-    glTranslatef(autoX, -5.6f, 0.0f);
-
-    // R: rotacion sobre su centro local
-    glRotatef(autoAngulo, 0.0f, 0.0f, 1.0f);
-
-    // S: escala uniforme sobre su centro local
-    glScalef(autoEscala, autoEscala, 1.0f);
-
-    dibujarModeloAuto();
-
-    glPopMatrix();
-}
-
-
+// ============================================================
 // TECLADO
-
-void reiniciarTransformaciones()
-{
-    autoX = 0.0f;
-    autoAngulo = 0.0f;
-    autoEscala = 1.0f;
-
-    arbolAngulo = 0.0f;
-    arbolEscala = 1.0f;
-
-    edificioEscala = 1.0f;
-
-    solX = 0.0f;
-    solY = 0.0f;
-}
+// ============================================================
 
 void teclado(unsigned char tecla, int, int)
 {
     switch (tecla)
     {
-        // AUTOMOVIL
-        case 'd':
-        case 'D':
-            autoX += 0.3f;
+        // Robot: base
+        case '1':
+            anguloBase += 5.0f;
             break;
 
-        case 'a':
-        case 'A':
-            autoX -= 0.3f;
+        case '2':
+            anguloBase -= 5.0f;
             break;
 
-        case 'q':
-        case 'Q':
-            autoAngulo += 5.0f;
+        // Robot: hombro
+        case '3':
+            anguloHombro += 5.0f;
             break;
 
-        case 'e':
-        case 'E':
-            autoAngulo -= 5.0f;
+        case '4':
+            anguloHombro -= 5.0f;
             break;
 
-        case '+':
-            autoEscala += 0.1f;
+        // Robot: codo
+        case '5':
+            anguloCodo += 5.0f;
             break;
 
-        case '-':
-            autoEscala -= 0.1f;
-            if (autoEscala < 0.2f)
-                autoEscala = 0.2f;
+        case '6':
+            anguloCodo -= 5.0f;
             break;
 
-        // ARBOL IZQUIERDO
-        case 'r':
-        case 'R':
-            arbolAngulo += 5.0f;
+        // Muneca
+        case '7':
+            anguloMuneca += 5.0f;
             break;
 
-        case 't':
-        case 'T':
-            arbolAngulo -= 5.0f;
+        case '8':
+            anguloMuneca -= 5.0f;
             break;
 
-        case 'z':
-        case 'Z':
-            arbolEscala += 0.1f;
+        // Pinza
+        case '9':
+            aperturaPinza += 0.05f;
             break;
 
-        case 'x':
-        case 'X':
-            arbolEscala -= 0.1f;
-            if (arbolEscala < 0.2f)
-                arbolEscala = 0.2f;
+        case '0':
+            aperturaPinza -= 0.05f;
             break;
 
-        // EDIFICIO
-        case 'c':
-        case 'C':
-            edificioEscala += 0.05f;
-            break;
-
-        case 'v':
-        case 'V':
-            edificioEscala -= 0.05f;
-            if (edificioEscala < 0.5f)
-                edificioEscala = 0.5f;
-            break;
-
-        // SOL
+        // Traslacion de caja
         case 'j':
         case 'J':
-            solX -= 0.2f;
+            cajaX -= 0.20f;
             break;
 
         case 'l':
         case 'L':
-            solX += 0.2f;
+            cajaX += 0.20f;
             break;
 
-        case 'i':
-        case 'I':
-            solY += 0.2f;
+        // Escala robot
+        case 'z':
+        case 'Z':
+            escalaRobot -= 0.05f;
             break;
 
-        case 'k':
-        case 'K':
-            solY -= 0.2f;
+        case 'x':
+        case 'X':
+            escalaRobot += 0.05f;
             break;
 
-        // REINICIAR
-        case '0':
-            reiniciarTransformaciones();
+        // Animacion cinta
+        case 'a':
+        case 'A':
+            animarCinta = !animarCinta;
+            break;
+
+        // Wireframe global
+        case 'w':
+        case 'W':
+            wireframeGlobal = !wireframeGlobal;
+            break;
+
+        // Reset
+        case 'r':
+        case 'R':
+            reiniciar();
+            return;
+
+        // Zoom
+        case '+':
+        case '=':
+            camaraDistancia -= 0.7f;
+            if (camaraDistancia < 7.0f)
+                camaraDistancia = 7.0f;
+            break;
+
+        case '-':
+        case '_':
+            camaraDistancia += 0.7f;
+            if (camaraDistancia > 30.0f)
+                camaraDistancia = 30.0f;
             break;
 
         // ESC
         case 27:
             std::exit(0);
+            break;
+    }
+
+    limitarAngulos();
+    glutPostRedisplay();
+}
+
+void tecladoEspecial(int tecla, int, int)
+{
+    switch (tecla)
+    {
+        // Vistas requeridas
+        case GLUT_KEY_F1:
+            vistaActual = 0; // perspectiva
+            break;
+
+        case GLUT_KEY_F2:
+            vistaActual = 1; // frontal
+            break;
+
+        case GLUT_KEY_F3:
+            vistaActual = 2; // lateral
+            break;
+
+        case GLUT_KEY_F4:
+            vistaActual = 3; // superior
+            break;
+
+        // Orbita de cámara en vista perspectiva
+        case GLUT_KEY_LEFT:
+            vistaActual = 0;
+            camaraAzimut -= 5.0f;
+            break;
+
+        case GLUT_KEY_RIGHT:
+            vistaActual = 0;
+            camaraAzimut += 5.0f;
+            break;
+
+        case GLUT_KEY_UP:
+            vistaActual = 0;
+            camaraElevacion += 4.0f;
+            if (camaraElevacion > 80.0f)
+                camaraElevacion = 80.0f;
+            break;
+
+        case GLUT_KEY_DOWN:
+            vistaActual = 0;
+            camaraElevacion -= 4.0f;
+            if (camaraElevacion < -10.0f)
+                camaraElevacion = -10.0f;
+            break;
     }
 
     glutPostRedisplay();
 }
 
+// ============================================================
+// TIMER
+// ============================================================
 
-// ESCENA COMPLETA
-
-
-void dibujarEscena()
+void timer(int)
 {
-    glClear(GL_COLOR_BUFFER_BIT);
+    if (animarCinta)
+    {
+        cajaX += 0.035f;
 
-    // Reiniciar MODELVIEW en cada frame
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+        if (cajaX > 3.6f)
+            cajaX = -2.8f;
 
-    dibujarPiso();
-    dibujarCarretera();
-    dibujarEdificio();
-    dibujarArbolIzquierdo();
-    dibujarArbolDerecho();
-    dibujarSol();
-    dibujarAuto();
+        glutPostRedisplay();
+    }
 
-    glutSwapBuffers();
+    glutTimerFunc(16, timer, 0);
 }
 
-
-// CONFIGURACION OPENGL
-
+// ============================================================
+// INICIALIZACION
+// ============================================================
 
 void inicializar()
 {
-    // Color del cielo
-    glClearColor(
-        0.45f,
-        0.75f,
-        1.0f,
-        1.0f
-    );
+    glClearColor(0.08f, 0.11f, 0.16f, 1.0f);
 
-    // Proyeccion ortogonal 2D
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
 
-    glOrtho(
-        -10.0, 10.0,
-        -7.5, 7.5,
-        -1.0, 1.0
-    );
-
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+    glShadeModel(GL_SMOOTH);
 }
 
 void mostrarControles()
 {
-    std::cout << "========================================\n";
-    std::cout << " PA1 - COMPUTACION GRAFICA / CONTROLES\n";
-    std::cout << "========================================\n";
-    std::cout << "AUTO:\n";
-    std::cout << "  A / D   -> Trasladar izquierda/derecha\n";
-    std::cout << "  Q / E   -> Rotar\n";
-    std::cout << "  + / -   -> Escalar\n\n";
-
-    std::cout << "ARBOL IZQUIERDO:\n";
-    std::cout << "  R / T   -> Rotar\n";
-    std::cout << "  Z / X   -> Escalar\n\n";
-
-    std::cout << "EDIFICIO:\n";
-    std::cout << "  C / V   -> Aumentar / reducir escala\n\n";
-
-    std::cout << "SOL:\n";
-    std::cout << "  I / J / K / L -> Trasladar\n\n";
-
-    std::cout << "OTROS:\n";
-    std::cout << "  0       -> Reiniciar transformaciones\n";
-    std::cout << "  ESC     -> Salir\n";
-    std::cout << "========================================\n";
+    std::cout << "\n";
+    std::cout << "====================================================\n";
+    std::cout << " PA2 - CELDA INDUSTRIAL ROBOTIZADA 3D\n";
+    std::cout << "====================================================\n";
+    std::cout << " ROBOT\n";
+    std::cout << "  1 / 2  -> Rotar base\n";
+    std::cout << "  3 / 4  -> Rotar hombro\n";
+    std::cout << "  5 / 6  -> Rotar codo\n";
+    std::cout << "  7 / 8  -> Rotar muneca\n";
+    std::cout << "  9 / 0  -> Abrir / cerrar pinza\n";
+    std::cout << "\n";
+    std::cout << " TRANSFORMACIONES\n";
+    std::cout << "  J / L  -> Trasladar caja de la cinta\n";
+    std::cout << "  Z / X  -> Reducir / aumentar escala del robot\n";
+    std::cout << "  A      -> Activar / detener cinta\n";
+    std::cout << "\n";
+    std::cout << " CAMARA\n";
+    std::cout << "  F1     -> Vista perspectiva\n";
+    std::cout << "  F2     -> Vista frontal\n";
+    std::cout << "  F3     -> Vista lateral\n";
+    std::cout << "  F4     -> Vista superior\n";
+    std::cout << "  Flechas-> Orbitar camara\n";
+    std::cout << "  + / -  -> Zoom\n";
+    std::cout << "\n";
+    std::cout << " OTROS\n";
+    std::cout << "  W      -> Wireframe global ON/OFF\n";
+    std::cout << "  R      -> Reiniciar escena\n";
+    std::cout << "  ESC    -> Salir\n";
+    std::cout << "====================================================\n";
 }
 
-
+// ============================================================
 // MAIN
+// ============================================================
 
 int main(int argc, char** argv)
 {
@@ -482,14 +1012,15 @@ int main(int argc, char** argv)
 
     glutInitDisplayMode(
         GLUT_DOUBLE |
-        GLUT_RGB
+        GLUT_RGB |
+        GLUT_DEPTH
     );
 
-    glutInitWindowSize(800, 600);
-    glutInitWindowPosition(100, 100);
+    glutInitWindowSize(1100, 720);
+    glutInitWindowPosition(100, 60);
 
     glutCreateWindow(
-        "PA1 - Computacion Grafica"
+        "PA2 - Celda Industrial Robotizada 3D"
     );
 
     inicializar();
@@ -497,6 +1028,9 @@ int main(int argc, char** argv)
 
     glutDisplayFunc(dibujarEscena);
     glutKeyboardFunc(teclado);
+    glutSpecialFunc(tecladoEspecial);
+    glutReshapeFunc(redimensionar);
+    glutTimerFunc(16, timer, 0);
 
     glutMainLoop();
 

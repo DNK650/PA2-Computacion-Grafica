@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(PA1_Computacion_Grafica)
+project(PA2_Computacion_Grafica)
 
 set(CMAKE_CXX_STANDARD 17)
 
@@ -18,19 +18,20 @@ set(FREEGLUT_BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(freeglut)
 
-add_executable(PA1_Computacion_Grafica
+add_executable(PA2_Computacion_Grafica
         main.cpp
 )
 
-target_include_directories(PA1_Computacion_Grafica
+target_include_directories(PA2_Computacion_Grafica
         PRIVATE
         ${freeglut_SOURCE_DIR}/include
 )
 
-target_link_libraries(PA1_Computacion_Grafica
+target_link_libraries(PA2_Computacion_Grafica
         PRIVATE
         freeglut_static
         opengl32
+        glu32
         winmm
         gdi32
 )
