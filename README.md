@@ -279,7 +279,8 @@ El resultado es una escena tridimensional interactiva que representa una **celda
 
 ## Autor
 
-**Ronaldo Meza**
+**Meza Pastrana, Diego Armando 
+Meza Pastrana, Diego Armando **
 
 Curso: **Computación Gráfica**
 
